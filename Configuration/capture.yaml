@@ -1,0 +1,4 @@
+capture:
+  interface: Wi-Fi
+  filter: tcp
+  packet_limit: 100
