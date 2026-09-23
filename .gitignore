@@ -1,0 +1,24 @@
+# Virtual environments
+ids/
+venv/
+.venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local runtime data (SQLite logs, generated reports)
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment and editor files
+.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
