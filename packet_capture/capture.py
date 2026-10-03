@@ -11,6 +11,7 @@ from queue import Full, Queue
 from threading import Event
 from typing import Any
 
+from configuration import CaptureSettings, get_config
 from packet_capture.filters import get_filter, set_filter, validate_filter
 from packet_capture.interface import get_default_interface, validate_interface
 from packet_capture.pcap import iter_pcap
@@ -43,10 +44,6 @@ class CaptureState:
 
 
 STATE = CaptureState()
-_DEFAULT_CONFIG_PATHS = (
-	Path(__file__).resolve().parent.parent / "configuration" / "capture.yaml",
-	Path(__file__).resolve().parent / "capture.yaml",
-)
 
 
 def _read_int_env(name: str, default: int) -> int:
@@ -60,49 +57,15 @@ def _read_int_env(name: str, default: int) -> int:
 		return default
 
 
-def _read_int(value: Any, default: int) -> int:
-	try:
-		return max(0, int(value))
-	except (TypeError, ValueError):
-		return default
+def _read_config(settings: CaptureSettings | None = None) -> CaptureConfig:
+	"""Read capture configuration from the config manager, with environment variable overrides."""
 
-
-def _load_yaml_config() -> dict[str, Any]:
-	"""Load the capture YAML config from the first available search path."""
-
-	config_path = os.environ.get("CAPTURE_CONFIG", "").strip()
-	search_paths = [Path(config_path)] if config_path else list(_DEFAULT_CONFIG_PATHS)
-	try:
-		yaml = import_module("yaml")
-	except ModuleNotFoundError:
-		logger.warning("PyYAML is not installed; capture.yaml is ignored")
-		return {}
-
-	for path in search_paths:
-		if not path or not path.exists():
-			continue
-		try:
-			with path.open("r", encoding="utf-8") as handle:
-				loaded = yaml.safe_load(handle)
-		except (OSError, yaml.YAMLError) as exc:
-			logger.warning("Unable to read %s: %s", path, exc)
-			return {}
-
-		return loaded if isinstance(loaded, dict) else {}
-
-	return {}
-
-
-def _read_config() -> CaptureConfig:
-	"""Read capture configuration from YAML and environment variables."""
-
-	loaded_config = _load_yaml_config().get("capture", {})
-	if not isinstance(loaded_config, dict):
-		loaded_config = {}
+	if settings is None:
+		settings = get_config().capture
 
 	interface = os.environ.get("CAPTURE_INTERFACE", "").strip()
 	if not interface:
-		interface = str(loaded_config.get("interface", "") or "").strip()
+		interface = settings.interface
 	if not interface:
 		interface = os.environ.get("DEFAULT_INTERFACE", "").strip()
 	if interface and not validate_interface(interface):
@@ -114,13 +77,13 @@ def _read_config() -> CaptureConfig:
 
 	filter_expression = os.environ.get("CAPTURE_FILTER", "").strip()
 	if not filter_expression:
-		filter_expression = str(loaded_config.get("filter", "") or "").strip()
+		filter_expression = settings.filter
 	if filter_expression and not validate_filter(filter_expression):
 		raise ValueError(f"Invalid capture filter: {filter_expression}")
 
 	queue_size = _read_int_env("CAPTURE_QUEUE_SIZE", 0)
 	if queue_size == 0:
-		queue_size = _read_int(loaded_config.get("packet_limit", 0), 0)
+		queue_size = settings.packet_limit
 	return CaptureConfig(
 		interface=interface or None,
 		filter_expression=filter_expression,
@@ -128,10 +91,10 @@ def _read_config() -> CaptureConfig:
 	)
 
 
-def initialize() -> dict[str, Any]:
-	"""Initialize the capture subsystem and load the active configuration."""
+def initialize(settings: CaptureSettings | None = None) -> dict[str, Any]:
+	"""Initialize the capture subsystem from the given settings, or the shared config."""
 
-	STATE.config = _read_config()
+	STATE.config = _read_config(settings)
 	if STATE.config.filter_expression:
 		set_filter(STATE.config.filter_expression)
 	else:

@@ -27,7 +27,7 @@ Alert Manager ......... B   ⬜
    ├──▶ SQLite DB ..... A   ⬜
    └──▶ Flask API ..... B   ⬜ ──▶ Dashboard ... B ⬜
 
-Config Manager ........ A   ⬜ (proposed)
+Config Manager ........ A   ✅ (proposed)
 Pipeline Runner ....... A   ⬜ (proposed)
 Reporting ............. A   ⬜ (proposed)
 Testing ............... A   ⬜
@@ -77,15 +77,15 @@ Testing ............... A   ⬜
 | 3.5 | B | ✅ | `get_stats()`: totals, pps/bps, protocol mix, top talkers, 5-minute per-second history; `get_flows()` for the API (`stats.py`) |
 | 3.6 | B | ✅ | 27 unit tests in `traffic_analyzer/tests/` |
 
-## Phase 4 — Configuration Manager (A, proposed) → `configuration/`
+## Phase 4 — Configuration Manager (A, proposed) → `configuration/` ✅ *(by B for A)*
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 4.1 | A | ⬜ | `configuration/ids.yaml` using the schema in CONTRACTS.md §5 (replaces `capture.yaml`) |
-| 4.2 | A | ⬜ | `load_config() -> Config` (dataclasses), with defaults and validation |
-| 4.3 | A | ⬜ | `save_config(config)` so the dashboard settings page can write changes |
-| 4.4 | A | ⬜ | Connect it to capture, analyzer, detection engine, logger |
-| 4.5 | A | ⬜ | Unit tests |
+| 4.1 | A *(by B for A)* | ✅ | `configuration/ids.yaml` using the schema in CONTRACTS.md §5 (`capture.yaml` removed) |
+| 4.2 | A *(by B for A)* | ✅ | `load_config() -> Config` (typed dataclasses), defaults for every setting, strict validation with errors that name the setting (`config.py`) |
+| 4.3 | A *(by B for A)* | ✅ | `merge_config()` for partial updates and atomic `save_config()` for the dashboard settings page |
+| 4.4 | A *(by B for A)* | ✅ | Capture reads `config.capture`; the analyzer takes `TrafficAnalyzer(**asdict(config.traffic))`. Detection thresholds are connected in **5.3**, the logger in **Phase 7**, the runner passes it all through in **Phase 6** |
+| 4.5 | A *(by B for A)* | ✅ | 39 unit tests in `configuration/tests/` |
 
 ## Phase 5 — Detection engine refinement (A)
 
@@ -194,13 +194,13 @@ Testing ............... A   ⬜
 
 ## Suggested order while one person covers both roles
 
-1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → **Phase 4** (config) → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
+1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → ~~Phase 4~~ ✅ → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
 2. **Phase 7** (DB) → **Phase 8** (Alert Manager) — Milestone 2.
 3. **Phase 9** (API) → **Phase 10** (Dashboard) — Milestone 3.
 4. **Phase 12** (testing) and **Phase 11** (reporting), then **Phase 13**.
 
 ## Handoff notes for Person A
 
-- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3) and **all of Phase 2** (capture fixes). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
+- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
 - Your next modules in the original split: **Phase 7** (Database layer) and **Phase 12** (Testing). The *(proposed)* items (Config Manager, Pipeline Runner, Reporting) are open for discussion.
 - Mark tasks ✅ in this file as they are finished, so both of you can see the current state.

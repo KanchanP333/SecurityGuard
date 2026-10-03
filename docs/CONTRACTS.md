@@ -96,7 +96,12 @@ Column names match the contract keys. Timestamps are stored as ISO 8601 UTC `TEX
 
 ## 5. Configuration file — `configuration/ids.yaml`
 
-Loaded by the Configuration Manager into a `Config` object. It replaces `capture.yaml`; the `capture` section keeps its current keys.
+Loaded by `configuration.load_config()` into a typed `Config` object (`config.detection.port_scan.unique_ports_threshold`, etc.). Every setting is optional: missing settings use the defaults below.
+
+- **Location:** `configuration/ids.yaml`, or the path in the `IDS_CONFIG` environment variable.
+- **Validation:** unknown keys, wrong types and out-of-range values raise `ConfigError` naming the exact setting, e.g. `detection.brute_force.ports[1]: port must be 1-65535`.
+- **Shared instance:** `get_config()` / `set_config()` / `reload_config()`. The dashboard applies partial changes with `merge_config(config, changes)` and writes them with `save_config(config)` (atomic; comments in the file are not kept).
+- **Capture overrides:** `CAPTURE_INTERFACE`, `CAPTURE_FILTER` and `CAPTURE_QUEUE_SIZE` environment variables still override the `capture` section.
 
 ```yaml
 capture:
@@ -120,7 +125,7 @@ detection:
     suspicious_ports: [23, 2323, 4444, 5555, 6667, 31337]
     blocked_ips: []
     blocked_protocols: []
-  signatures: []            # [{name, pattern, severity}] matched against packet_dict.payload
+  signatures: []            # [{name, pattern, regex (default false = substring), severity}] matched against packet_dict.payload
 
 logging:
   enabled: true

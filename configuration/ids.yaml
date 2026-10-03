@@ -1,0 +1,39 @@
+# SecurityGuard configuration. Field reference: docs/CONTRACTS.md section 5.
+
+capture:
+  interface: ""             # empty = auto-detect; e.g. "Wi-Fi" on Windows, "eth0" on Linux
+  filter: ""                # BPF subset; empty captures everything ("tcp" alone hides ICMP/UDP)
+  packet_limit: 1000        # capture queue size, 0 = unbounded
+
+traffic:
+  window_seconds: 60        # length of each source's sliding window
+  flow_timeout_seconds: 120 # idle flows are evicted after this
+
+detection:
+  enabled: [port_scan, syn_flood, icmp_flood, brute_force, custom_rules]
+  alert_cooldown_seconds: 300
+  port_scan:
+    unique_ports_threshold: 7
+  syn_flood:
+    syn_threshold: 10
+    ack_threshold: 2
+  icmp_flood:
+    pps_threshold: 20
+  brute_force:
+    attempts_threshold: 5
+    ports: [22, 21, 23, 3389]
+  custom_rules:
+    blocked_ports: []
+    suspicious_ports: [23, 2323, 4444, 5555, 6667, 31337]
+    blocked_ips: []
+    blocked_protocols: []
+  signatures: []            # e.g. - {name: "Path traversal", pattern: "../../", severity: High}
+
+logging:
+  enabled: true
+  db_path: data/ids.db      # relative to the project root
+  store_packets: true
+
+dashboard:
+  host: 127.0.0.1
+  port: 5000
