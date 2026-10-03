@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from collections import deque
-from datetime import datetime, timezone
 from time import monotonic
 from typing import Any
 
@@ -32,9 +31,8 @@ def _build_alert(packet_dict: dict[str, Any], rate: float) -> dict[str, Any]:
 	src_key = str(packet_dict.get("src_ip", "")).strip() or "unknown"
 	icmp_tracker.setdefault(src_key, {}).update({"last_assessment": scoring})
 	return {
-		"timestamp": packet_dict.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-		"source_ip": packet_dict.get("src_ip"),
-		"destination_ip": packet_dict.get("dst_ip"),
+		"src_ip": packet_dict.get("src_ip"),
+		"dst_ip": packet_dict.get("dst_ip"),
 		"attack_type": "ICMP Flood",
 		"severity": scoring["severity"],
 		"confidence": scoring["confidence"],

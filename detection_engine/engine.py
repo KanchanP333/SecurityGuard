@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from importlib import util
 from pathlib import Path
 from types import ModuleType
@@ -50,7 +51,39 @@ def _load_detector_module(detector_name: str) -> ModuleType:
 
 
 def _default_detector_order() -> list[str]:
-	return ["port_scan", "syn_flood", "icmp_flood", "brute_force"]
+	return ["port_scan", "syn_flood", "icmp_flood", "brute_force", "custom_rules"]
+
+
+def _iso_timestamp(value: Any) -> str:
+	"""Convert a packet timestamp (datetime, epoch seconds, or ISO string) to an ISO 8601 UTC string."""
+
+	if isinstance(value, datetime):
+		return value.astimezone(timezone.utc).isoformat()
+	if isinstance(value, (int, float)):
+		return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+	if isinstance(value, str) and value:
+		return value
+	return datetime.now(timezone.utc).isoformat()
+
+
+def _finalize_alert(
+	alert: dict[str, Any],
+	detector_name: str,
+	packet_data: dict[str, Any],
+	flow_data: dict[str, Any],
+) -> dict[str, Any]:
+	"""Fill the shared alert_object fields (see docs/CONTRACTS.md) that detectors leave out."""
+
+	alert.setdefault("alert_id", None)
+	alert["timestamp"] = _iso_timestamp(alert.get("timestamp") or packet_data.get("timestamp"))
+	alert["rule"] = detector_name
+	alert.setdefault("src_ip", packet_data.get("src_ip"))
+	alert.setdefault("dst_ip", packet_data.get("dst_ip"))
+	alert.setdefault("dst_port", packet_data.get("dst_port"))
+	alert.setdefault("protocol", packet_data.get("protocol"))
+	alert.setdefault("flow_id", flow_data.get("flow_id"))
+	alert["confidence"] = round(float(alert.get("confidence", 0.0)), 2)
+	return alert
 
 
 def _normalize_enabled_detectors(enabled_detectors: Iterable[str] | None) -> list[str]:
@@ -82,7 +115,7 @@ def run_engine(
 			continue
 		alert = detect(packet_data, flow_data)
 		if alert is not None:
-			alerts.append(alert)
+			alerts.append(_finalize_alert(alert, detector_name, packet_data, flow_data))
 
 	return alerts
 

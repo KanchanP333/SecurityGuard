@@ -6,7 +6,6 @@
  
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 
@@ -52,9 +51,8 @@ def _build_alert(packet_dict: dict[str, Any], reason: str) -> dict[str, Any]:
 	tracker_key = str(packet_dict.get("src_ip", "")).strip() or "unknown"
 	custom_rules_tracker.setdefault(tracker_key, {}).update({"last_assessment": scoring})
 	return {
-		"timestamp": packet_dict.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-		"source_ip": packet_dict.get("src_ip"),
-		"destination_ip": packet_dict.get("dst_ip"),
+		"src_ip": packet_dict.get("src_ip"),
+		"dst_ip": packet_dict.get("dst_ip"),
 		"attack_type": "Custom Rule",
 		"severity": scoring["severity"],
 		"confidence": scoring["confidence"],

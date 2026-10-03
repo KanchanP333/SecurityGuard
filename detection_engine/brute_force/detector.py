@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 
@@ -30,9 +29,8 @@ def _build_alert(packet_dict: dict[str, Any], attempt_count: int) -> dict[str, A
 	tracker_key = f"{str(packet_dict.get('src_ip', '')).strip() or 'unknown'}->{str(packet_dict.get('dst_ip', '')).strip() or 'unknown'}:{SSH_PORT}"
 	brute_force_tracker.setdefault(tracker_key, {}).update({"last_assessment": scoring})
 	return {
-		"timestamp": packet_dict.get("timestamp") or datetime.now(timezone.utc).isoformat(),
-		"source_ip": packet_dict.get("src_ip"),
-		"destination_ip": packet_dict.get("dst_ip"),
+		"src_ip": packet_dict.get("src_ip"),
+		"dst_ip": packet_dict.get("dst_ip"),
 		"attack_type": "Brute Force",
 		"severity": scoring["severity"],
 		"confidence": scoring["confidence"],
