@@ -52,8 +52,12 @@ Returned by the Traffic Analyzer for every packet. It describes the packet's flo
 | `src_window.pps` | `float` | |
 | `src_window.syn_count`, `src_window.ack_count` | `int` | |
 | `src_window.icmp_count` | `int` | |
-| `src_window.unique_dst_ports` | `int` | Distinct destination ports contacted |
+| `src_window.unique_dst_ports` | `int` | Distinct destination ports of connection attempts (TCP SYN without ACK, and UDP). Replies are excluded, so a busy server isn't mistaken for a scanner |
 | `src_window.unique_dst_ips` | `int` | Distinct destination hosts contacted |
+
+`src_window` counts are kept in 1-second buckets. `src_window.pps` = `packet_count / max(time since the oldest packet in the window, 1.0)`, so a short burst shows its real rate.
+
+The analyzer also provides `get_stats()` (global totals, pps/bps over the last 5 s, protocol mix, top 10 source/destination IPs, active flow count, per-second history for the last 300 s) and `get_flows(limit)` (active flows, newest first, without `src_window`) for the API and dashboard.
 
 Use the per-flow fields for single-connection behaviour. Use `src_window` for attacks that span many connections (port scan, SYN flood with random source ports, ICMP flood).
 

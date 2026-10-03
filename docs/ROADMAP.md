@@ -17,7 +17,7 @@ Packet Capture ........ A   ✅ (Phase 2 fixes done)
 Packet Parser ......... B   ✅
    │
    ▼
-Traffic Analyzer ...... B   ⬜ (proposed)
+Traffic Analyzer ...... B   ✅ (proposed)
    │
    ▼
 Detection Engine ...... A   ✅ (refinement pending)
@@ -66,16 +66,16 @@ Testing ............... A   ⬜
 | 2.6 | A *(by B for A)* | ✅ | Unknown interface (e.g. `Wi-Fi` on Linux) falls back to auto-detection with a warning; auto-detection skips Linux `lo`; PowerShell discovery only runs on Windows (it crashed on WSL) |
 | 2.7 | A *(by B for A)* | ✅ | 43 unit tests in `packet_capture/tests/` (filters, stats, PCAP, interface, config, queueing, replay) |
 
-## Phase 3 — Traffic Analyzer (B, proposed) → `traffic_analyzer/`
+## Phase 3 — Traffic Analyzer (B, proposed) → `traffic_analyzer/` ✅
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 3.1 | B | ⬜ | Flow table keyed by `flow_id`; `analyze(packet_dict) -> flow_object` |
-| 3.2 | B | ⬜ | Per-source sliding window (`src_window`): pps, SYN/ACK/ICMP counts, unique dst ports/IPs |
-| 3.3 | B | ⬜ | Use packet timestamps, not the wall clock (needed for correct PCAP replay) |
-| 3.4 | B | ⬜ | Idle-flow eviction (`flow_timeout_seconds`) and a memory cap |
-| 3.5 | B | ⬜ | Global traffic stats for the dashboard: pps, bytes, protocol mix, top source/destination IPs |
-| 3.6 | B | ⬜ | Unit tests |
+| 3.1 | B | ✅ | Flow table keyed by `flow_id`; `analyze(packet_dict) -> flow_object` (`flows.py`, `analyzer.py`) |
+| 3.2 | B | ✅ | Per-source sliding window (`src_window`) in 1-second buckets: pps, SYN/ACK/ICMP counts, unique dst ports/IPs (`windows.py`) |
+| 3.3 | B | ✅ | Packet timestamps used throughout, so PCAP replay gives the same results as live capture |
+| 3.4 | B | ✅ | Idle-flow eviction, quiet-source eviction, caps of 100k flows / 100k sources |
+| 3.5 | B | ✅ | `get_stats()`: totals, pps/bps, protocol mix, top talkers, 5-minute per-second history; `get_flows()` for the API (`stats.py`) |
+| 3.6 | B | ✅ | 27 unit tests in `traffic_analyzer/tests/` |
 
 ## Phase 4 — Configuration Manager (A, proposed) → `configuration/`
 
@@ -194,7 +194,7 @@ Testing ............... A   ⬜
 
 ## Suggested order while one person covers both roles
 
-1. ~~Phase 2~~ ✅ → **Phase 3** (analyzer) → **Phase 4** (config) → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
+1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → **Phase 4** (config) → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
 2. **Phase 7** (DB) → **Phase 8** (Alert Manager) — Milestone 2.
 3. **Phase 9** (API) → **Phase 10** (Dashboard) — Milestone 3.
 4. **Phase 12** (testing) and **Phase 11** (reporting), then **Phase 13**.
