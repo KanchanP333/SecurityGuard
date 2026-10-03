@@ -10,21 +10,27 @@ from typing import Any
 
 
 def _run_powershell_json(command: str) -> Any:
-	"""Run a PowerShell command and parse JSON output when available."""
+	"""Run a PowerShell command and parse JSON output when available (Windows only)."""
 
-	completed = subprocess.run(
-		[
-			"powershell",
-			"-NoProfile",
-			"-ExecutionPolicy",
-			"Bypass",
-			"-Command",
-			command,
-		],
-		capture_output=True,
-		text=True,
-		check=False,
-	)
+	if os.name != "nt":
+		return []
+
+	try:
+		completed = subprocess.run(
+			[
+				"powershell",
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				command,
+			],
+			capture_output=True,
+			text=True,
+			check=False,
+		)
+	except OSError:
+		return []
 	output = completed.stdout.strip()
 	if not output:
 		return []
@@ -42,6 +48,12 @@ def _normalize_name(name: str) -> str:
 	if "loopback" in cleaned.lower():
 		return "Loopback"
 	return cleaned
+
+
+def _is_loopback(name: str) -> bool:
+	"""Return True for loopback interfaces (Windows 'Loopback', Linux 'lo', macOS 'lo0')."""
+
+	return name.strip().lower() in {"loopback", "lo", "lo0"}
 
 
 def _discover_windows_interfaces() -> list[str]:
@@ -123,7 +135,7 @@ def get_default_interface() -> str | None:
 		return None
 
 	for interface in interfaces:
-		if interface.lower() != "loopback":
+		if not _is_loopback(interface):
 			return interface
 
 	return interfaces[0]

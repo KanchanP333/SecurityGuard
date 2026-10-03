@@ -11,7 +11,7 @@ A simplified but realistic network IDS (Scapy + SQLite + Flask). Data formats: [
 Network / PCAP
    │
    ▼
-Packet Capture ........ A   ✅
+Packet Capture ........ A   ✅ (Phase 2 fixes done)
    │
    ▼
 Packet Parser ......... B   ✅
@@ -54,17 +54,17 @@ Testing ............... A   ⬜
 | 1.3 | A *(by B for A)* | ✅ | Detectors use `src_ip`/`dst_ip`; engine fills `rule`, `timestamp` (ISO), `dst_port`, `protocol`, `flow_id`, `alert_id`; `custom_rules` on by default. Fixes the flags mismatch that stopped all TCP detectors from firing |
 | 1.4 | A | ⬜ | Person A reviews `CONTRACTS.md` and the changes in 1.3 |
 
-## Phase 2 — Fix the capture module (A)
+## Phase 2 — Fix the capture module (A) ✅ *(by B for A)*
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 2.1 | A | ⬜ | Package imports in `capture.py` (`from packet_capture.filters import ...`), so it works when imported from the project root |
-| 2.2 | A | ⬜ | Config path points to `Configuration/`; the folder is now `configuration/` (breaks on Linux) |
-| 2.3 | A | ⬜ | Replace the per-packet debug `print`s in `capture_packet` with `logging` |
-| 2.4 | A | ⬜ | PCAP replay goes through the same path as live capture (packets go to the queue / callback), so the rest of the pipeline can't tell the difference |
-| 2.5 | A | ⬜ | Default capture filter: the current `tcp` hides ICMP and UDP, so ICMP flood can never fire |
-| 2.6 | A | ⬜ | Handle a configured interface that doesn't exist (e.g. `Wi-Fi` on Linux) by falling back to auto-detection with a warning, instead of raising |
-| 2.7 | A | ⬜ | Unit tests: filters, stats, PCAP loading (write a small PCAP with `wrpcap` into `tmp_path`) |
+| 2.1 | A *(by B for A)* | ✅ | Package imports in `capture.py`; run it with `python -m packet_capture.capture` |
+| 2.2 | A *(by B for A)* | ✅ | Config path now `configuration/capture.yaml`; PyYAML added (it was missing, so the YAML was silently ignored) |
+| 2.3 | A *(by B for A)* | ✅ | Debug `print`s replaced with `logging`; dropped packets counted in `STATE.dropped` |
+| 2.4 | A *(by B for A)* | ✅ | `capture.replay_pcap(path)` streams a PCAP into the same queue as live capture (blocking, no drops; sets `stop_event` when done). `pcap.py` now has `load_pcap` and streaming `iter_pcap` |
+| 2.5 | A *(by B for A)* | ✅ | Default capture filter is empty, so ICMP/UDP reach the detectors |
+| 2.6 | A *(by B for A)* | ✅ | Unknown interface (e.g. `Wi-Fi` on Linux) falls back to auto-detection with a warning; auto-detection skips Linux `lo`; PowerShell discovery only runs on Windows (it crashed on WSL) |
+| 2.7 | A *(by B for A)* | ✅ | 43 unit tests in `packet_capture/tests/` (filters, stats, PCAP, interface, config, queueing, replay) |
 
 ## Phase 3 — Traffic Analyzer (B, proposed) → `traffic_analyzer/`
 
@@ -186,7 +186,7 @@ Testing ............... A   ⬜
 | # | Owner | Status | Task |
 |---|---|---|---|
 | 13.1 | B | ⬜ | `README.md`: setup, running (root/Administrator; Npcap on Windows), screenshots |
-| 13.2 | A | ⬜ | `requirements.txt`: scapy, pyyaml, flask, reportlab, pytest |
+| 13.2 | A | 🟡 | `requirements.txt`: scapy, pyyaml, pytest added; add flask, reportlab when those phases start |
 | 13.3 | A+B | ⬜ | End-to-end demo script and sample PCAPs |
 | 13.4 | A+B | ⬜ | Final project report / presentation |
 
@@ -194,13 +194,13 @@ Testing ............... A   ⬜
 
 ## Suggested order while one person covers both roles
 
-1. **Phase 2** (quick capture fixes) → **Phase 3** (analyzer) → **Phase 4** (config) → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
+1. ~~Phase 2~~ ✅ → **Phase 3** (analyzer) → **Phase 4** (config) → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
 2. **Phase 7** (DB) → **Phase 8** (Alert Manager) — Milestone 2.
 3. **Phase 9** (API) → **Phase 10** (Dashboard) — Milestone 3.
 4. **Phase 12** (testing) and **Phase 11** (reporting), then **Phase 13**.
 
 ## Handoff notes for Person A
 
-- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default). Details in `CONTRACTS.md` §3.
+- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3) and **all of Phase 2** (capture fixes). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
 - Your next modules in the original split: **Phase 7** (Database layer) and **Phase 12** (Testing). The *(proposed)* items (Config Manager, Pipeline Runner, Reporting) are open for discussion.
 - Mark tasks ✅ in this file as they are finished, so both of you can see the current state.

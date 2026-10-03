@@ -1,4 +1,4 @@
 capture:
   interface: Wi-Fi
-  filter: tcp
+  filter: ""  # empty captures everything; "tcp" alone would hide ICMP/UDP from detection
   packet_limit: 100
