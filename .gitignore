@@ -15,6 +15,9 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+data/
 
 # Environment and editor files
 .env

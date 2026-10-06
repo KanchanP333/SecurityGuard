@@ -170,9 +170,11 @@ class LoggingSettings:
     enabled: bool = True
     db_path: str = "data/ids.db"  # relative paths are relative to the project root
     store_packets: bool = True
+    packet_retention_days: int = 7  # stored packets older than this are deleted; 0 = keep forever
 
     def validate(self, path: str) -> None:
         _check(bool(self.db_path.strip()), f"{path}.db_path", "is required")
+        _check(self.packet_retention_days >= 0, f"{path}.packet_retention_days", "must be 0 or more")
 
     def resolved_db_path(self) -> Path:
         db_path = Path(self.db_path)

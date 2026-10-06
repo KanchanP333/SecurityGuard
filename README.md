@@ -2,7 +2,7 @@
 
 A simplified but realistic **network intrusion detection system (IDS)** written in Python. It captures traffic live or from PCAP files, tracks flows, detects common attacks, and reports alerts. The aim is breadth with a readable codebase, not a replacement for Snort or Suricata.
 
-> **Status:** the detection pipeline works end to end from the command line (capture → parse → analyze → detect → alerts). Alert storage, the Flask dashboard and reporting are in progress. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status:** the detection pipeline works end to end from the command line (capture → parse → analyze → detect → alerts), and packets and alerts are stored in SQLite. The Alert Manager, the Flask dashboard and reporting are in progress. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Features
 
@@ -21,8 +21,9 @@ A simplified but realistic **network intrusion detection system (IDS)** written 
   - payload signatures (substring or regex)
 - Alert severity (Medium → High → Critical) that escalates as an attack grows, with a cooldown so an ongoing attack doesn't flood you with alerts
 - One validated YAML config for all settings
+- SQLite storage of packets, alerts and warning events (`data/ids.db` by default), with automatic cleanup of old packets
 
-**Planned:** SQLite storage of packets and alerts, alert history and export, a Flask dashboard (live traffic, alerts, statistics, packet viewer, settings), CSV/PDF reports, and attack-simulation tooling with accuracy metrics.
+**Planned:** alert history, correlation and export, a Flask dashboard (live traffic, alerts, statistics, packet viewer, settings), CSV/PDF reports, and attack-simulation tooling with accuracy metrics.
 
 ## How it works
 
@@ -91,6 +92,7 @@ python main.py --list-interfaces
 | `-d`, `--duration SECONDS` | Stop live capture after this long (default: until Ctrl+C) |
 | `-c`, `--config FILE` | Use a different config file |
 | `--json` | Print alerts as JSON lines (for scripts) |
+| `--no-db` | Don't store packets and alerts in the database |
 | `--list-interfaces` | List capture interfaces and exit |
 | `-v`, `--verbose` | Debug logging |
 
@@ -105,7 +107,8 @@ Summary
   Packets processed : 689
   Packets skipped   : 20 (unsupported protocols)
   Errors            : 0
-  Alerts            : 7
+  Alerts            : 14
+  Stored in         : data/ids.db
 ```
 
 > **WSL note:** WSL 2 runs in a virtual machine, so live capture on `eth0` only sees WSL's own traffic, not your Windows host's Wi-Fi. To monitor the host's network, run SecurityGuard on Windows itself.
@@ -119,7 +122,7 @@ All settings are in [`configuration/ids.yaml`](configuration/ids.yaml). Every se
 | `capture` | Interface, BPF filter, capture queue size |
 | `traffic` | Sliding-window length, idle-flow timeout |
 | `detection` | Which detectors are enabled, alert cooldown, per-detector thresholds, blocked/suspicious ports and IPs, payload signatures |
-| `logging` | SQLite database path, whether packets are stored *(used from Phase 7)* |
+| `logging` | SQLite database path, whether packets are stored, how many days to keep them |
 | `dashboard` | Host and port for the web UI *(used from Phase 9)* |
 
 The signature detector is off by default. To turn it on, add `signatures` to `detection.enabled` and define some patterns:
@@ -144,7 +147,7 @@ The config is checked on load. A typo or bad value stops the program with an err
 | `detection_engine/` | Dispatcher + one folder per detector | Person A | ✅ |
 | `configuration/` | Config manager and `ids.yaml` | Person A | ✅ |
 | `pipeline/`, `main.py` | Pipeline runner and command line | Person A | ✅ |
-| `logger_sqlite/` | SQLite storage and queries | Person A | ⬜ |
+| `logger_sqlite/` | SQLite storage and queries | Person A | ✅ |
 | `alert_manager/` | Alert history, correlation, export | Person B | ⬜ |
 | `dashboard_flask/` | REST API and web dashboard | Person B | ⬜ |
 | `reporting/` | Summaries, CSV/PDF reports | Person A | ⬜ |

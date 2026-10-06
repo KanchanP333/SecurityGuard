@@ -24,7 +24,7 @@ Detection Engine ...... A   ✅
    │
    ▼
 Alert Manager ......... B   ⬜
-   ├──▶ SQLite DB ..... A   ⬜
+   ├──▶ SQLite DB ..... A   ✅
    └──▶ Flask API ..... B   ⬜ ──▶ Dashboard ... B ⬜
 
 Config Manager ........ A   ✅ (proposed)
@@ -113,16 +113,17 @@ Testing ............... A   ⬜
 
 **🎯 Milestone 1 ✅** reached: a PCAP mixing normal traffic with a port scan, SYN flood, SSH brute force, ICMP flood and a path-traversal payload is replayed through `main.py`. Every attack is detected and the normal traffic raises no alerts.
 
-## Phase 7 — Database layer (A, Module 3) → `logger_sqlite/`
+## Phase 7 — Database layer (A, Module 3) → `logger_sqlite/` ✅ *(by B for A)*
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 7.1 | A | ⬜ | Schema (CONTRACTS.md §4): `packets`, `alerts`, `events`, with indexes on `timestamp`, `src_ip`, `rule`, `severity` |
-| 7.2 | A | ⬜ | `insert_alert(alert) -> alert_id`, `insert_packet(packet_dict)`, `log_event(level, source, message)` |
-| 7.3 | A | ⬜ | Queries: recent alerts; filter by severity/rule/IP/time range; packet search; aggregates for stats |
-| 7.4 | A | ⬜ | Thread safety (single writer thread or per-thread connections) and batched packet inserts |
-| 7.5 | A | ⬜ | Retention / cleanup of old packets |
-| 7.6 | A | ⬜ | Unit tests against a temporary database |
+| 7.1 | A *(by B for A)* | ✅ | Schema (CONTRACTS.md §4): `packets`, `alerts`, `events`, indexed on timestamp, IPs, rule, severity; WAL mode; schema version 1 |
+| 7.2 | A *(by B for A)* | ✅ | `insert_alert() -> alert_id`, `insert_packet()`, `log_event()`, `update_alert_status()`; `DatabaseLogHandler` stores WARNING+ logs as events |
+| 7.3 | A *(by B for A)* | ✅ | Filtered, paginated alert/packet/event queries and counts; `alert_summary`, `traffic_summary`, `alerts_per_day` |
+| 7.4 | A *(by B for A)* | ✅ | Per-thread connections (safe to share one `Database`); packets written in batches (~67k packets/s) |
+| 7.5 | A *(by B for A)* | ✅ | `logging.packet_retention_days` (default 7), measured from when packets were stored so old PCAPs aren't purged at once; alerts are kept |
+| 7.6 | A *(by B for A)* | ✅ | 22 tests in `logger_sqlite/tests/`, including a concurrent reader/writer test |
+| 7.7 | A *(by B for A)* | ✅ | `main.py` stores packets and alerts (printed with their `alert_id`) unless `--no-db`; prints the database path in the summary |
 
 ## Phase 8 — Alert Manager (B, Module 2) → `alert_manager/`
 
@@ -198,12 +199,12 @@ Testing ............... A   ⬜
 ## Suggested order while one person covers both roles
 
 1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → ~~Phase 4~~ ✅ → ~~Phase 5~~ ✅ → ~~Phase 6~~ ✅ — Milestone 1 ✅
-2. **Phase 7** (DB) → **Phase 8** (Alert Manager) — Milestone 2.
+2. ~~Phase 7~~ ✅ → **Phase 8** (Alert Manager) — Milestone 2.
 3. **Phase 9** (API) → **Phase 10** (Dashboard) — Milestone 3.
 4. **Phase 12** (testing) and **Phase 11** (reporting), then **Phase 13**.
 
 ## Handoff notes for Person A
 
-- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes), **all of Phase 5** (detectors rewritten around the analyzer and config; `detect()` now takes a third `settings` argument; `custom_rules.set_rules()` removed in favour of config) **all of Phase 6** (`pipeline/` + `main.py`; engine cooldown now lets severity escalations through) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
+- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes), **all of Phase 5** (detectors rewritten around the analyzer and config; `detect()` now takes a third `settings` argument; `custom_rules.set_rules()` removed in favour of config) **all of Phase 7** (`logger_sqlite/`), **all of Phase 6** (`pipeline/` + `main.py`; engine cooldown now lets severity escalations through) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
 - Your next modules in the original split: **Phase 7** (Database layer) and **Phase 12** (Testing). The *(proposed)* items (Config Manager, Pipeline Runner, Reporting) are open for discussion.
 - Mark tasks ✅ in this file as they are finished, so both of you can see the current state.

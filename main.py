@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 from configuration import ConfigError, load_config, merge_config, set_config
+from logger_sqlite import Database, DatabaseLogHandler
 from packet_capture.interface import list_interfaces
 from pipeline import Pipeline, PipelineStats
 
@@ -59,6 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duration", "-d", type=float, metavar="SECONDS", help="stop live capture after this many seconds")
     parser.add_argument("--config", "-c", metavar="FILE", help="config file (default: configuration/ids.yaml or $IDS_CONFIG)")
     parser.add_argument("--json", action="store_true", help="print alerts as JSON lines")
+    parser.add_argument("--no-db", action="store_true", help="don't store packets and alerts in the database")
     parser.add_argument("--verbose", "-v", action="store_true", help="show debug logging")
     return parser
 
@@ -85,38 +87,59 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     set_config(config)
 
-    def print_alert(alert: dict[str, Any]) -> None:
+    database = None
+    log_handler = None
+    if config.logging.enabled and not args.no_db:
+        database = Database.from_settings(config.logging)
+        log_handler = DatabaseLogHandler(database)
+        logging.getLogger().addHandler(log_handler)
+
+    def handle_alert(alert: dict[str, Any]) -> None:
+        if database is not None:
+            database.insert_alert(alert)
         print(json.dumps(alert) if args.json else format_alert(alert), flush=True)
 
-    pipeline = Pipeline(config, on_alert=print_alert)
+    store_packets = database is not None and config.logging.store_packets
+    pipeline = Pipeline(config, on_packet=database.insert_packet if store_packets else None, on_alert=handle_alert)
+    try:
+        code, stats = run(args, pipeline)
+    finally:
+        if database is not None:
+            logging.getLogger().removeHandler(log_handler)
+            database.close()
 
+    if stats is not None and not args.json:
+        print(format_summary(stats))
+        if database is not None:
+            print(f"  Stored in         : {database.path}")
+    return code
+
+
+def run(args: argparse.Namespace, pipeline: Pipeline) -> tuple[int, PipelineStats | None]:
+    """Run the pipeline on a PCAP file or live traffic. Returns (exit code, stats)."""
     if args.pcap:
         try:
-            stats = pipeline.run_pcap(args.pcap)
+            return 0, pipeline.run_pcap(args.pcap)
         except FileNotFoundError as exc:
             print(exc, file=sys.stderr)
-            return 1
+            return 1, None
         except KeyboardInterrupt:
-            stats = pipeline.stop()
-    else:
-        try:
-            started = pipeline.start_live()
-        except (PermissionError, RuntimeError, ValueError) as exc:
-            print(exc, file=sys.stderr)
-            return 1
-        if not args.json:
-            print(f"Capturing on {started['interface']} (filter: {started['filter'] or 'none'}). Press Ctrl+C to stop.", flush=True)
-        try:
-            deadline = time.monotonic() + args.duration if args.duration else None
-            while deadline is None or time.monotonic() < deadline:
-                time.sleep(0.2)
-        except KeyboardInterrupt:
-            pass
-        stats = pipeline.stop()
+            return 0, pipeline.stop()
 
+    try:
+        started = pipeline.start_live()
+    except (PermissionError, RuntimeError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1, None
     if not args.json:
-        print(format_summary(stats))
-    return 0
+        print(f"Capturing on {started['interface']} (filter: {started['filter'] or 'none'}). Press Ctrl+C to stop.", flush=True)
+    try:
+        deadline = time.monotonic() + args.duration if args.duration else None
+        while deadline is None or time.monotonic() < deadline:
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        pass
+    return 0, pipeline.stop()
 
 
 if __name__ == "__main__":

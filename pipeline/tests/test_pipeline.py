@@ -11,6 +11,7 @@ from scapy.utils import wrpcap
 
 import main
 from configuration import Config, merge_config
+from logger_sqlite import Database
 from packet_capture import capture
 from pipeline import Pipeline
 
@@ -193,8 +194,32 @@ def run_cli(args, capsys):
 @pytest.fixture
 def cli_config(tmp_path):
     path = tmp_path / "ids.yaml"
-    path.write_text("capture:\n  interface: lo\n", encoding="utf-8")
+    path.write_text(f"capture:\n  interface: lo\nlogging:\n  db_path: {tmp_path / 'ids.db'}\n", encoding="utf-8")
     return str(path)
+
+
+def test_cli_stores_packets_and_alerts(attack_pcap, cli_config, tmp_path, capsys):
+    code, out, _ = run_cli(["--pcap", str(attack_pcap), "--config", cli_config], capsys)
+    assert code == 0
+    assert f"Stored in         : {tmp_path / 'ids.db'}" in out
+
+    with Database(tmp_path / "ids.db") as db:
+        assert db.count_packets() == 40
+        alerts = db.query_alerts()
+        assert {a["rule"] for a in alerts} == {"port_scan", "syn_flood", "icmp_flood"}
+        assert all(a["status"] == "new" for a in alerts)
+
+
+def test_cli_json_alerts_include_alert_id(attack_pcap, cli_config, capsys):
+    _, out, _ = run_cli(["--pcap", str(attack_pcap), "--config", cli_config, "--json"], capsys)
+    assert all(isinstance(json.loads(line)["alert_id"], int) for line in out.splitlines())
+
+
+def test_cli_no_db(attack_pcap, cli_config, tmp_path, capsys):
+    code, out, _ = run_cli(["--pcap", str(attack_pcap), "--config", cli_config, "--no-db"], capsys)
+    assert code == 0
+    assert "Stored in" not in out
+    assert not (tmp_path / "ids.db").exists()
 
 
 def test_cli_pcap_prints_alerts_and_summary(attack_pcap, cli_config, capsys):

@@ -34,6 +34,7 @@ logging:
   enabled: true
   db_path: data/ids.db      # relative to the project root
   store_packets: true
+  packet_retention_days: 7  # older stored packets are deleted; 0 = keep forever (alerts are always kept)
 
 dashboard:
   host: 127.0.0.1

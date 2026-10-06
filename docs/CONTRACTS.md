@@ -87,13 +87,26 @@ Detectors have the signature `detect(packet_dict, flow_object, settings: Detecti
 
 ---
 
-## 4. Database tables (Person A, Module 3)
+## 4. Database — `logger_sqlite.Database` (Person A, Module 3)
 
-Column names match the contract keys. Timestamps are stored as ISO 8601 UTC `TEXT`.
+Column names match the contract keys. Timestamps are stored as ISO 8601 UTC `TEXT` with microseconds (e.g. `2026-09-21T14:13:20.000000+00:00`), so they sort and compare correctly as text.
 
-- **packets**: `id`, `timestamp`, `src_mac`, `dst_mac`, `src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`, `flags`, `ttl`, `packet_length`, `payload_size`, `icmp_type`, `icmp_code`
-- **alerts**: `id` (→ `alert_id`), `timestamp`, `rule`, `attack_type`, `severity`, `confidence`, `src_ip`, `dst_ip`, `dst_port`, `protocol`, `flow_id`, `description`, `status`
+- **packets**: `id`, `timestamp`, `src_mac`, `dst_mac`, `src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`, `flags`, `ttl`, `packet_length`, `payload_size`, `icmp_type`, `icmp_code`, `stored_at` (when it was saved; used for retention)
+- **alerts**: `id` (→ `alert_id`), `timestamp`, `rule`, `attack_type`, `severity`, `confidence`, `src_ip`, `dst_ip`, `dst_port`, `protocol`, `flow_id`, `description`, `status` (`new` / `acknowledged` / `resolved`)
 - **events**: `id`, `timestamp`, `level` (`INFO`/`WARNING`/`ERROR`), `source` (module name), `message`
+
+| Method | Purpose |
+|---|---|
+| `insert_packet(packet_dict, flow_object=None)` | Buffered; written every 500 packets or 1 s. Fits the pipeline's `on_packet` hook |
+| `insert_alert(alert) -> alert_id` | Written immediately; sets `alert_id` and `status` on the dict |
+| `get_alert(id)`, `update_alert_status(id, status)` | |
+| `query_alerts(severity, rule, status, ip, since, until, limit, offset)`, `count_alerts(...)` | Newest first; `severity`/`rule`/`status` accept one value or a list; `ip` matches source or destination |
+| `query_packets(ip, src_ip, dst_ip, port, protocol, since, until, limit, offset)`, `count_packets(...)` | Newest first; `port` matches source or destination |
+| `log_event(level, source, message)`, `recent_events(limit, level, since)` | `DatabaseLogHandler` stores WARNING+ log records as events |
+| `alert_summary(since, until)`, `traffic_summary(since, until)`, `alerts_per_day(days)` | Aggregates for the dashboard and reports |
+| `purge_old_packets()` | Deletes packets stored more than `logging.packet_retention_days` ago (runs on open and hourly). Alerts are never purged |
+
+One `Database` object can be shared by all threads: each thread gets its own connection, and WAL mode lets readers (dashboard) and the writer (pipeline) work at the same time. Call `close()` (or use `with`) to flush buffered packets.
 
 ---
 
@@ -134,6 +147,7 @@ logging:
   enabled: true
   db_path: data/ids.db
   store_packets: true
+  packet_retention_days: 7 # stored packets older than this are deleted; 0 = keep forever
 
 dashboard:
   host: 127.0.0.1
