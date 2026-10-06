@@ -188,7 +188,7 @@ Testing ............... A   ⬜
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 13.1 | B | ⬜ | `README.md`: setup, running (root/Administrator; Npcap on Windows), screenshots |
+| 13.1 | B | 🟡 | `README.md`: setup, running (root/Administrator; Npcap on Windows) done; add dashboard screenshots and update module statuses as phases finish |
 | 13.2 | A | 🟡 | `requirements.txt`: scapy, pyyaml, pytest added; add flask, reportlab when those phases start |
 | 13.3 | A+B | ⬜ | End-to-end demo script and sample PCAPs |
 | 13.4 | A+B | ⬜ | Final project report / presentation |
