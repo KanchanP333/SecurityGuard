@@ -75,7 +75,20 @@ def test_reset_clears_cooldowns(pipeline):
     burst_at_30s = [packet(t=30 + i * 0.004, protocol="ICMP", src_ip="10.0.0.5") for i in range(200)]
     assert p.feed(burst_at_30s[:100], enabled=["icmp_flood"]) == []
     engine.reset()
-    assert len(p.feed(burst_at_30s[100:], enabled=["icmp_flood"])) == 1
+    after_reset = p.feed(burst_at_30s[100:], enabled=["icmp_flood"])
+    assert [a["severity"] for a in after_reset] == ["Medium", "High"]
+
+
+def test_escalating_severity_is_reported_within_cooldown(pipeline):
+    alerts = pipeline().feed([packet(t=i * 0.002, protocol="ICMP") for i in range(400)], enabled=["icmp_flood"])
+    assert [a["severity"] for a in alerts] == ["Medium", "High", "Critical"]
+
+
+def test_same_or_lower_severity_stays_suppressed(pipeline):
+    p = pipeline()
+    p.feed([packet(t=i * 0.002, protocol="ICMP") for i in range(400)], enabled=["icmp_flood"])
+    slower = [packet(t=10 + i * 0.02, protocol="ICMP") for i in range(400)]
+    assert p.feed(slower, enabled=["icmp_flood"]) == []
 
 
 def test_uses_shared_config_when_no_settings_given():
@@ -104,8 +117,10 @@ def test_full_pipeline_from_scapy_packets():
         packet_dict = parse_packet(pkt)
         alerts += engine.run_engine(packet_dict, analyzer.analyze(packet_dict), settings=settings)
 
-    found = {(a["rule"], a["src_ip"]) for a in alerts}
-    assert ("port_scan", "10.0.0.5") in found
-    assert ("brute_force", "10.0.0.7") in found
-    assert ("icmp_flood", "10.0.0.8") in found
-    assert len(alerts) == len(found)
+    def severities(rule, src_ip):
+        return [a["severity"] for a in alerts if (a["rule"], a["src_ip"]) == (rule, src_ip)]
+
+    # 29 ports with a threshold of 7: Medium at 7, High at 14, Critical at 21.
+    assert severities("port_scan", "10.0.0.5") == ["Medium", "High", "Critical"]
+    assert severities("brute_force", "10.0.0.7") == ["Medium"]
+    assert severities("icmp_flood", "10.0.0.8")[0] == "Medium"

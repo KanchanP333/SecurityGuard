@@ -28,7 +28,7 @@ Alert Manager ......... B   ⬜
    └──▶ Flask API ..... B   ⬜ ──▶ Dashboard ... B ⬜
 
 Config Manager ........ A   ✅ (proposed)
-Pipeline Runner ....... A   ⬜ (proposed)
+Pipeline Runner ....... A   ✅ (proposed)
 Reporting ............. A   ⬜ (proposed)
 Testing ............... A   ⬜
 ```
@@ -100,15 +100,18 @@ Testing ............... A   ⬜
 | 5.7 | A *(by B for A)* | ✅ | New `signatures` detector: case-insensitive substring or regex patterns from config, matched against `packet_dict.payload`. Add `signatures` to `detection.enabled` to switch it on |
 | 5.8 | A *(by B for A)* | ✅ | 33 tests in `detection_engine/tests/`, including a full Scapy → parser → analyzer → engine run |
 
-## Phase 6 — Pipeline runner (A, proposed) → `main.py`
+## Phase 6 — Pipeline runner (A, proposed) → `pipeline/`, `main.py` ✅ *(by B for A)*
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 6.1 | A | ⬜ | Worker loop: capture queue → parse (skip unsupported) → analyze → detect → Alert Manager |
-| 6.2 | A | ⬜ | CLI: `--config`, `--interface`, `--pcap <file>` |
-| 6.3 | A | ⬜ | Clean shutdown (Ctrl+C stops the sniffer, flushes the DB) |
+| 6.1 | A *(by B for A)* | ✅ | `pipeline.Pipeline`: worker thread draining the capture queue → parse (unsupported skipped) → analyze → detect; `on_packet` / `on_alert` hooks for the logger and Alert Manager (CONTRACTS.md §6) |
+| 6.2 | A *(by B for A)* | ✅ | `main.py`: `--pcap`, `--interface`, `--filter`, `--duration`, `--config`, `--json`, `--list-interfaces`; readable alert lines and a run summary |
+| 6.3 | A *(by B for A)* | ✅ | Clean shutdown: Ctrl+C stops capture and drains the queue. Live capture now reports missing root/Administrator rights instead of failing silently; a stopped replay can no longer hang on a full queue. (Flushing the DB is part of Phase 7) |
+| 6.4 | A *(by B for A)* | ✅ | Engine lets a higher-severity alert through during the cooldown, so attacks are reported as they escalate (Medium → High → Critical) |
+| 6.5 | A *(by B for A)* | ✅ | 15 tests in `pipeline/tests/` (PCAP replay, hooks, live capture with a fake sniffer, CLI) |
+| 6.6 | A | ⬜ | Manually test real live capture with root: `sudo ids/bin/python main.py --duration 30` (and as Administrator on Windows) |
 
-**🎯 Milestone 1:** an attack PCAP replayed through `main.py` prints correct alerts.
+**🎯 Milestone 1 ✅** reached: a PCAP mixing normal traffic with a port scan, SYN flood, SSH brute force, ICMP flood and a path-traversal payload is replayed through `main.py`. Every attack is detected and the normal traffic raises no alerts.
 
 ## Phase 7 — Database layer (A, Module 3) → `logger_sqlite/`
 
@@ -127,7 +130,7 @@ Testing ............... A   ⬜
 |---|---|---|---|
 | 8.1 | B | ⬜ | `handle_alert(alert_object)`: entry point called by the pipeline |
 | 8.2 | B | ⬜ | Correlation across rules: the engine already suppresses repeats of the same rule (5.4), but one attack can still fire several rules (a port scan also fires `syn_flood`). Group these per source into one incident |
-| 8.3 | B | ⬜ | Severity policy: escalate repeat offenders or multiple attack types from the same source |
+| 8.3 | B | ⬜ | Severity policy across rules: raise severity for repeat offenders or several attack types from one source (escalation within a single rule is already done by the engine, 6.4) |
 | 8.4 | B | ⬜ | Store via DB layer (gets `alert_id`), set `status = "new"`; acknowledge/resolve functions |
 | 8.5 | B | ⬜ | In-memory recent-alerts buffer + subscriber callbacks for live dashboard updates |
 | 8.6 | B | ⬜ | Alert history and CSV/JSON export |
@@ -194,13 +197,13 @@ Testing ............... A   ⬜
 
 ## Suggested order while one person covers both roles
 
-1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → ~~Phase 4~~ ✅ → ~~Phase 5~~ ✅ → **Phase 6** (runner) — reaches Milestone 1.
+1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → ~~Phase 4~~ ✅ → ~~Phase 5~~ ✅ → ~~Phase 6~~ ✅ — Milestone 1 ✅
 2. **Phase 7** (DB) → **Phase 8** (Alert Manager) — Milestone 2.
 3. **Phase 9** (API) → **Phase 10** (Dashboard) — Milestone 3.
 4. **Phase 12** (testing) and **Phase 11** (reporting), then **Phase 13**.
 
 ## Handoff notes for Person A
 
-- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes), **all of Phase 5** (detectors rewritten around the analyzer and config; `detect()` now takes a third `settings` argument; `custom_rules.set_rules()` removed in favour of config) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
+- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes), **all of Phase 5** (detectors rewritten around the analyzer and config; `detect()` now takes a third `settings` argument; `custom_rules.set_rules()` removed in favour of config) **all of Phase 6** (`pipeline/` + `main.py`; engine cooldown now lets severity escalations through) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
 - Your next modules in the original split: **Phase 7** (Database layer) and **Phase 12** (Testing). The *(proposed)* items (Config Manager, Pipeline Runner, Reporting) are open for discussion.
 - Mark tasks ✅ in this file as they are finished, so both of you can see the current state.

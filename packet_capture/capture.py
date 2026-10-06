@@ -9,6 +9,7 @@ import os
 from dataclasses import dataclass, field
 from queue import Full, Queue
 from threading import Event
+import time
 from typing import Any
 
 from configuration import CaptureSettings, get_config
@@ -120,7 +121,7 @@ def capture_packet(packet: Any, block: bool = False) -> Any:
 	"""Update stats and forward a captured packet to the processing queue.
 
 	Live capture uses block=False so a slow consumer drops packets instead of
-	stalling the sniffer. PCAP replay uses block=True so no packets are lost.
+	stalling the sniffer. PCAP replay waits for queue space instead (see replay_pcap).
 	"""
 
 	if logger.isEnabledFor(logging.DEBUG):
@@ -140,8 +141,33 @@ def capture_packet(packet: Any, block: bool = False) -> Any:
 	return packet
 
 
+def _wait_for_sniffer(sniffer: Any, timeout: float = 3.0) -> None:
+	"""Wait until the background sniffer has opened its socket.
+
+	Scapy runs the sniffer in a thread and only stores errors (e.g. missing
+	root/Administrator rights, unknown interface) on the sniffer object, so
+	check for them here and raise them in the caller instead of failing silently.
+	"""
+
+	deadline = time.monotonic() + timeout
+	while time.monotonic() < deadline:
+		if sniffer.exception is not None:
+			error = sniffer.exception
+			if isinstance(error, PermissionError):
+				raise PermissionError("Live capture needs root/Administrator rights (run with sudo, or as Administrator with Npcap on Windows)") from error
+			raise RuntimeError(f"Live capture failed to start: {error}") from error
+		if hasattr(sniffer, "continue_sniff"):
+			return
+		time.sleep(0.02)
+	logger.warning("Sniffer did not report ready within %.1fs; continuing", timeout)
+
+
 def start_capture() -> dict[str, Any]:
-	"""Start live sniffing in the background."""
+	"""Start live sniffing in the background.
+
+	Raises PermissionError without capture rights, or RuntimeError if the
+	sniffer fails to start for another reason.
+	"""
 
 	if STATE.running:
 		return {
@@ -165,12 +191,32 @@ def start_capture() -> dict[str, Any]:
 		prn=capture_packet,
 	)
 	STATE.sniffer.start()
+	try:
+		_wait_for_sniffer(STATE.sniffer)
+	except Exception:
+		STATE.sniffer = None
+		STATE.running = False
+		STATE.source = None
+		raise
 
 	return {
 		"running": STATE.running,
 		"interface": STATE.config.interface,
 		"filter": get_filter(),
 	}
+
+
+def _queue_until_stopped(packet: Any) -> bool:
+	"""Queue a replayed packet, waiting for space. Returns False if replay was stopped while waiting."""
+
+	update_stats(packet)
+	while True:
+		try:
+			STATE.packet_queue.put(packet, timeout=0.2)
+			return True
+		except Full:
+			if STATE.stop_event.is_set():
+				return False
 
 
 def replay_pcap(pcap_file: str | Path) -> int:
@@ -193,9 +239,8 @@ def replay_pcap(pcap_file: str | Path) -> int:
 	count = 0
 	try:
 		for packet in iter_pcap(pcap_file):
-			if STATE.stop_event.is_set():
+			if STATE.stop_event.is_set() or not _queue_until_stopped(packet):
 				break
-			capture_packet(packet, block=True)
 			count += 1
 	finally:
 		STATE.running = False
@@ -209,8 +254,12 @@ def stop_capture() -> dict[str, Any]:
 	"""Stop the active sniffing session or PCAP replay."""
 
 	if STATE.sniffer is not None:
-		STATE.sniffer.stop()
-		STATE.sniffer = None
+		sniffer, STATE.sniffer = STATE.sniffer, None
+		try:
+			if sniffer.running:
+				sniffer.stop()
+		except Exception as exc:
+			logger.warning("Sniffer stopped with an error: %s", exc)
 
 	STATE.stop_event.set()
 	STATE.running = False

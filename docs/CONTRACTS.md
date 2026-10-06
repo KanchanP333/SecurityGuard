@@ -68,7 +68,7 @@ Use the per-flow fields for single-connection behaviour. Use `src_window` for at
 
 Detectors have the signature `detect(packet_dict, flow_object, settings: DetectionSettings) -> dict | None` and return only the fields they know (`attack_type`, `severity`, `confidence`, `description`, optionally `src_ip`/`dst_ip`), plus an optional internal `dedup_key`. `detection_engine.engine.run_engine(packet_dict, flow_object, enabled_detectors=None, settings=None)` fills in the rest, so every alert leaving the engine has all fields below.
 
-**Cooldown:** the engine raises at most one alert per (`rule`, `dedup_key`) every `detection.alert_cooldown_seconds`, measured in packet time. `dedup_key` defaults to `src_ip`; brute force uses `src->dst:port`, custom rules and signatures include the matched rule. `engine.reset()` clears cooldowns and detector state.
+**Cooldown:** the engine raises at most one alert per (`rule`, `dedup_key`) every `detection.alert_cooldown_seconds`, measured in packet time, except that a **higher severity** than the last one raised is always let through. An escalating attack therefore produces e.g. Medium → High → Critical alerts, and nothing more until the cooldown ends. `dedup_key` defaults to `src_ip`; brute force uses `src->dst:port`, custom rules and signatures include the matched rule. `engine.reset()` clears cooldowns and detector state.
 
 | Key | Type | Set by | Notes |
 |---|---|---|---|
@@ -139,3 +139,16 @@ dashboard:
   host: 127.0.0.1
   port: 5000
 ```
+
+---
+
+## 6. Pipeline hooks — `pipeline.Pipeline`
+
+`Pipeline(config, on_packet=None, on_alert=None)` runs capture → parse → analyze → detect. Later modules plug in through its hooks instead of changing the pipeline:
+
+| Hook | Called with | Intended user |
+|---|---|---|
+| `on_packet(packet_dict, flow_object)` | every parsed packet | Database layer (store packets) |
+| `on_alert(alert_object)` | every alert from the engine | Alert Manager |
+
+Hooks run on the pipeline's worker thread, so they should be quick. A hook that raises is logged and skipped; it never stops the pipeline. `run_pcap(path)` blocks until the file is fully processed; `start_live()` / `stop()` run live capture in the background. Both return `PipelineStats` (`processed`, `skipped`, `errors`, `alerts`, `alerts_by_rule`).

@@ -2,7 +2,7 @@
 
 #This file serves as the main dispatcher for the detection engine. It manages the loading and execution of the detector modules: port scan, SYN flood, ICMP flood, brute force, custom rules and signatures.
 #The dispatcher runs the detectors enabled in the configuration against each packet_dict and flow_object (see docs/CONTRACTS.md), passing them the detection settings.
-#It fills the shared alert fields and applies a per-alert cooldown, so an ongoing attack produces one alert per cooldown period instead of one per packet.
+#It fills the shared alert fields and applies a per-alert cooldown, so an ongoing attack produces one alert per cooldown period instead of one per packet, plus one more each time its severity escalates.
 
 from __future__ import annotations
 
@@ -36,9 +36,10 @@ _DETECTOR_FILES = {
 
 _MODULE_CACHE: dict[str, ModuleType] = {}
 
-# (rule, dedup_key) -> packet time (epoch seconds) of the last alert raised for it.
-_LAST_ALERT: dict[tuple[str, str], float] = {}
+# (rule, dedup_key) -> (packet time the cooldown started, highest severity rank raised since).
+_LAST_ALERT: dict[tuple[str, str], tuple[float, int]] = {}
 _MAX_COOLDOWN_ENTRIES = 50_000
+_SEVERITY_RANK = {"Low": 1, "Medium": 2, "High": 3, "Critical": 4}
 
 
 def _load_detector_module(detector_name: str) -> ModuleType:
@@ -88,16 +89,27 @@ def _iso_timestamp(value: Any) -> str:
 	return datetime.now(timezone.utc).isoformat()
 
 
-def _in_cooldown(key: tuple[str, str], now: float, cooldown_seconds: float) -> bool:
-	"""Return True if this alert was already raised within the cooldown; otherwise record it."""
+def _in_cooldown(key: tuple[str, str], severity: str, now: float, cooldown_seconds: float) -> bool:
+	"""Return True if this alert was already raised within the cooldown; otherwise record it.
 
+	An alert whose severity is higher than the last one raised for the same key
+	is let through even inside the cooldown, so an escalating attack is reported.
+	"""
+
+	rank = _SEVERITY_RANK.get(severity, 0)
 	last = _LAST_ALERT.get(key)
-	if last is not None and 0 <= now - last < cooldown_seconds:
-		return True
+	if last is not None:
+		last_time, last_rank = last
+		if 0 <= now - last_time < cooldown_seconds and rank <= last_rank:
+			return True
+		if 0 <= now - last_time < cooldown_seconds:
+			# Escalation: keep the original cooldown start so repeats stay suppressed.
+			_LAST_ALERT[key] = (last_time, rank)
+			return False
 
-	_LAST_ALERT[key] = now
+	_LAST_ALERT[key] = (now, rank)
 	if len(_LAST_ALERT) > _MAX_COOLDOWN_ENTRIES:
-		for stale_key in [k for k, t in _LAST_ALERT.items() if now - t >= cooldown_seconds]:
+		for stale_key in [k for k, (t, _) in _LAST_ALERT.items() if now - t >= cooldown_seconds]:
 			del _LAST_ALERT[stale_key]
 	return False
 
@@ -162,7 +174,7 @@ def run_engine(
 			continue
 
 		dedup_key = str(alert.pop("dedup_key", None) or packet_data.get("src_ip") or "")
-		if _in_cooldown((detector_name, dedup_key), now, settings.alert_cooldown_seconds):
+		if _in_cooldown((detector_name, dedup_key), str(alert.get("severity")), now, settings.alert_cooldown_seconds):
 			continue
 		alerts.append(_finalize_alert(alert, detector_name, packet_data, flow_data))
 
