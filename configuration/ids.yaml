@@ -20,7 +20,8 @@ detection:
   icmp_flood:
     pps_threshold: 20
   brute_force:
-    attempts_threshold: 5
+    attempts_threshold: 5   # connection attempts per source → destination:port
+    window_seconds: 60
     ports: [22, 21, 23, 3389]
   custom_rules:
     blocked_ports: []

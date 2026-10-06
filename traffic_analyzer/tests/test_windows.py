@@ -44,14 +44,37 @@ def test_icmp_burst_pps():
     for i in range(25):
         flow = analyzer.analyze(packet(t=i * 0.004, protocol="ICMP"))
     assert flow["src_window"]["pps"] == 25.0
+    assert flow["src_window"]["icmp_pps"] == 25.0
     assert flow["pps"] == 25.0
+
+
+def test_icmp_pps_ignores_other_protocols():
+    analyzer = TrafficAnalyzer()
+    for i in range(10):
+        analyzer.analyze(packet(t=i * 0.01, protocol="TCP", src_port=40000 + i))
+    for i in range(5):
+        flow = analyzer.analyze(packet(t=0.5 + i * 0.01, protocol="ICMP"))
+    assert flow["src_window"]["pps"] == 15.0
+    assert flow["src_window"]["icmp_pps"] == 5.0
 
 
 def test_steady_traffic_pps():
     analyzer = TrafficAnalyzer()
     for i in range(30):
         flow = analyzer.analyze(packet(t=i * 2.0, protocol="ICMP"))
-    assert 0.45 < flow["src_window"]["pps"] < 0.55
+    # 0.5 pps sampled over 5 s: 2 or 3 packets.
+    assert 0.4 <= flow["src_window"]["pps"] <= 0.6
+    assert flow["src_window"]["packet_count"] == 30
+
+
+def test_earlier_activity_does_not_dilute_a_new_burst():
+    analyzer = TrafficAnalyzer()
+    for i in range(5):
+        analyzer.analyze(packet(t=float(i), protocol="ICMP"))
+    for i in range(250):
+        flow = analyzer.analyze(packet(t=30 + i * 0.004, protocol="ICMP"))
+    assert flow["src_window"]["icmp_pps"] == 50.0
+    assert flow["src_window"]["icmp_count"] == 255
 
 
 def test_old_activity_leaves_the_window():

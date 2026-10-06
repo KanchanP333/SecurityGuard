@@ -49,13 +49,14 @@ Returned by the Traffic Analyzer for every packet. It describes the packet's flo
 | `src_window` | `dict` | Activity from `src_ip` over the last `window_seconds` (all flows): |
 | `src_window.window_seconds` | `int` | From config, default 60 |
 | `src_window.packet_count` | `int` | |
-| `src_window.pps` | `float` | |
+| `src_window.pps` | `float` | Recent packet rate (see below) |
 | `src_window.syn_count`, `src_window.ack_count` | `int` | |
 | `src_window.icmp_count` | `int` | |
+| `src_window.icmp_pps` | `float` | Recent ICMP packet rate (see below) |
 | `src_window.unique_dst_ports` | `int` | Distinct destination ports of connection attempts (TCP SYN without ACK, and UDP). Replies are excluded, so a busy server isn't mistaken for a scanner |
 | `src_window.unique_dst_ips` | `int` | Distinct destination hosts contacted |
 
-`src_window` counts are kept in 1-second buckets. `src_window.pps` = `packet_count / max(time since the oldest packet in the window, 1.0)`, so a short burst shows its real rate.
+`src_window` counts are kept in 1-second buckets and cover the whole window. The rates (`pps`, `icmp_pps`) only cover the **last 5 seconds**: packets in the last 5 s divided by 5, or by the time since the source's oldest packet in the window if that is shorter (minimum 1 s). A new burst therefore shows its real rate, and earlier quiet periods don't dilute a flood. A flood shorter than 5 s from an already-known source is under-measured by up to 5×.
 
 The analyzer also provides `get_stats()` (global totals, pps/bps over the last 5 s, protocol mix, top 10 source/destination IPs, active flow count, per-second history for the last 300 s) and `get_flows(limit)` (active flows, newest first, without `src_window`) for the API and dashboard.
 
@@ -65,7 +66,9 @@ Use the per-flow fields for single-connection behaviour. Use `src_window` for at
 
 ## 3. `alert_object` — Detection → Alert Manager → Database / Dashboard
 
-Detectors return only the fields they know (`attack_type`, `severity`, `confidence`, `description`, optionally `src_ip`/`dst_ip`). `detection_engine.engine` fills in the rest, so every alert leaving the engine has all fields below.
+Detectors have the signature `detect(packet_dict, flow_object, settings: DetectionSettings) -> dict | None` and return only the fields they know (`attack_type`, `severity`, `confidence`, `description`, optionally `src_ip`/`dst_ip`), plus an optional internal `dedup_key`. `detection_engine.engine.run_engine(packet_dict, flow_object, enabled_detectors=None, settings=None)` fills in the rest, so every alert leaving the engine has all fields below.
+
+**Cooldown:** the engine raises at most one alert per (`rule`, `dedup_key`) every `detection.alert_cooldown_seconds`, measured in packet time. `dedup_key` defaults to `src_ip`; brute force uses `src->dst:port`, custom rules and signatures include the matched rule. `engine.reset()` clears cooldowns and detector state.
 
 | Key | Type | Set by | Notes |
 |---|---|---|---|
@@ -119,7 +122,7 @@ detection:
   port_scan:    { unique_ports_threshold: 7 }
   syn_flood:    { syn_threshold: 10, ack_threshold: 2 }
   icmp_flood:   { pps_threshold: 20 }
-  brute_force:  { attempts_threshold: 5, ports: [22, 21, 23, 3389] }
+  brute_force:  { attempts_threshold: 5, window_seconds: 60, ports: [22, 21, 23, 3389] }
   custom_rules:
     blocked_ports: []
     suspicious_ports: [23, 2323, 4444, 5555, 6667, 31337]

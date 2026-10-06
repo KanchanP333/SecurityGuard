@@ -99,10 +99,12 @@ class IcmpFloodSettings:
 @dataclass
 class BruteForceSettings:
     attempts_threshold: int = 5
+    window_seconds: int = 60
     ports: list[int] = field(default_factory=lambda: [22, 21, 23, 3389])
 
     def validate(self, path: str) -> None:
         _check_positive(self.attempts_threshold, f"{path}.attempts_threshold")
+        _check_positive(self.window_seconds, f"{path}.window_seconds")
         _check_ports(self.ports, f"{path}.ports")
 
 

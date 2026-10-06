@@ -20,7 +20,7 @@ Packet Parser ......... B   ✅
 Traffic Analyzer ...... B   ✅ (proposed)
    │
    ▼
-Detection Engine ...... A   ✅ (refinement pending)
+Detection Engine ...... A   ✅
    │
    ▼
 Alert Manager ......... B   ⬜
@@ -87,18 +87,18 @@ Testing ............... A   ⬜
 | 4.4 | A *(by B for A)* | ✅ | Capture reads `config.capture`; the analyzer takes `TrafficAnalyzer(**asdict(config.traffic))`. Detection thresholds are connected in **5.3**, the logger in **Phase 7**, the runner passes it all through in **Phase 6** |
 | 4.5 | A *(by B for A)* | ✅ | 39 unit tests in `configuration/tests/` |
 
-## Phase 5 — Detection engine refinement (A)
+## Phase 5 — Detection engine refinement (A) ✅ *(by B for A)*
 
 | # | Owner | Status | Task |
 |---|---|---|---|
-| 5.1 | A | ⬜ | Detectors read `flow_object` (`src_window` for port scan / SYN flood / ICMP flood) instead of keeping their own counters |
-| 5.2 | A | ⬜ | ICMP flood: drop the `monotonic()` wall clock (wrong for PCAP replay) and use the analyzer's rate |
-| 5.3 | A | ⬜ | Thresholds come from config instead of module constants; engine takes `enabled` from config |
-| 5.4 | A | ⬜ | Re-alerting: `alerted` is currently set once per key forever and trackers never expire. Add a cooldown, state expiry, and a `reset()` for tests |
-| 5.5 | A | ⬜ | Brute force: configurable service ports (SSH, FTP, Telnet, RDP) and a time window |
-| 5.6 | A | ⬜ | Suspicious-port detection via `custom_rules.suspicious_ports` |
-| 5.7 | A | ⬜ | Signature matching: new `signatures` detector that matches config patterns against `packet_dict.payload` |
-| 5.8 | A | ⬜ | Unit tests for each detector and the engine (there are none today) |
+| 5.1 | A *(by B for A)* | ✅ | Port scan, SYN flood and ICMP flood read `flow_object["src_window"]` and keep no state of their own |
+| 5.2 | A *(by B for A)* | ✅ | ICMP flood uses the analyzer's `icmp_pps` (packet time, last 5 s); the `monotonic()` clock is gone. Analyzer rates now cover the last 5 s so earlier quiet periods can't hide a flood |
+| 5.3 | A *(by B for A)* | ✅ | Detectors get `DetectionSettings`; thresholds and the `enabled` list come from `ids.yaml` |
+| 5.4 | A *(by B for A)* | ✅ | Engine-level cooldown per (`rule`, `dedup_key`) in packet time, replacing the "alert once forever" flags; brute-force state expires; `engine.reset()` |
+| 5.5 | A *(by B for A)* | ✅ | Brute force: configurable ports (SSH, FTP, Telnet, RDP) and `window_seconds`; only counts real connection attempts (SYN without ACK) |
+| 5.6 | A *(by B for A)* | ✅ | `custom_rules.suspicious_ports` flags connection attempts to common backdoor ports |
+| 5.7 | A *(by B for A)* | ✅ | New `signatures` detector: case-insensitive substring or regex patterns from config, matched against `packet_dict.payload`. Add `signatures` to `detection.enabled` to switch it on |
+| 5.8 | A *(by B for A)* | ✅ | 33 tests in `detection_engine/tests/`, including a full Scapy → parser → analyzer → engine run |
 
 ## Phase 6 — Pipeline runner (A, proposed) → `main.py`
 
@@ -126,7 +126,7 @@ Testing ............... A   ⬜
 | # | Owner | Status | Task |
 |---|---|---|---|
 | 8.1 | B | ⬜ | `handle_alert(alert_object)`: entry point called by the pipeline |
-| 8.2 | B | ⬜ | De-duplication and correlation: suppress repeats inside the cooldown; merge overlaps (a port scan currently also fires `syn_flood`) |
+| 8.2 | B | ⬜ | Correlation across rules: the engine already suppresses repeats of the same rule (5.4), but one attack can still fire several rules (a port scan also fires `syn_flood`). Group these per source into one incident |
 | 8.3 | B | ⬜ | Severity policy: escalate repeat offenders or multiple attack types from the same source |
 | 8.4 | B | ⬜ | Store via DB layer (gets `alert_id`), set `status = "new"`; acknowledge/resolve functions |
 | 8.5 | B | ⬜ | In-memory recent-alerts buffer + subscriber callbacks for live dashboard updates |
@@ -194,13 +194,13 @@ Testing ............... A   ⬜
 
 ## Suggested order while one person covers both roles
 
-1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → ~~Phase 4~~ ✅ → **Phase 5** (detector refinement) → **Phase 6** (runner) — reaches Milestone 1.
+1. ~~Phase 2~~ ✅ → ~~Phase 3~~ ✅ → ~~Phase 4~~ ✅ → ~~Phase 5~~ ✅ → **Phase 6** (runner) — reaches Milestone 1.
 2. **Phase 7** (DB) → **Phase 8** (Alert Manager) — Milestone 2.
 3. **Phase 9** (API) → **Phase 10** (Dashboard) — Milestone 3.
 4. **Phase 12** (testing) and **Phase 11** (reporting), then **Phase 13**.
 
 ## Handoff notes for Person A
 
-- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
+- Changes made to your modules while you were away: **1.3** (alert field names, shared fields filled by `engine.py`, `custom_rules` enabled by default; details in `CONTRACTS.md` §3), **all of Phase 2** (capture fixes), **all of Phase 5** (detectors rewritten around the analyzer and config; `detect()` now takes a third `settings` argument; `custom_rules.set_rules()` removed in favour of config) and **all of Phase 4** (Configuration Manager; `capture.yaml` became `ids.yaml`, and `CAPTURE_CONFIG` was replaced by `IDS_CONFIG`). Note `pcap.replay_pcap` was replaced by `capture.replay_pcap`, which feeds the capture queue.
 - Your next modules in the original split: **Phase 7** (Database layer) and **Phase 12** (Testing). The *(proposed)* items (Config Manager, Pipeline Runner, Reporting) are open for discussion.
 - Mark tasks ✅ in this file as they are finished, so both of you can see the current state.

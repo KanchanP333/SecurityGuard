@@ -6,6 +6,9 @@ from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Any
 
+# Packet rates in src_window are measured over this many recent seconds.
+RATE_SECONDS = 5
+
 
 @dataclass(slots=True)
 class _Bucket:
@@ -89,15 +92,35 @@ class _SourceWindow:
             _subtract(self.dst_ports, bucket.dst_ports)
             _subtract(self.dst_ips, bucket.dst_ips)
 
+    def _recent_rates(self) -> tuple[float, float]:
+        """Packets/sec and ICMP packets/sec over the last RATE_SECONDS.
+
+        The divisor is RATE_SECONDS, or the time since the oldest packet still in
+        the window if that is shorter (minimum 1 s), so a brand-new burst shows its
+        real rate and older quiet periods don't dilute a new flood.
+        """
+        if not self.buckets:
+            return 0.0, 0.0
+        oldest_recent_second = int(self.last_seen) - RATE_SECONDS
+        packets = icmp = 0
+        for bucket in reversed(self.buckets):
+            if bucket.second <= oldest_recent_second:
+                break
+            packets += bucket.packet_count
+            icmp += bucket.icmp_count
+        span = min(float(RATE_SECONDS), max(self.last_seen - self.buckets[0].first_ts, 1.0))
+        return packets / span, icmp / span
+
     def snapshot(self, window_seconds: int) -> dict[str, Any]:
-        span = max(self.last_seen - self.buckets[0].first_ts, 1.0) if self.buckets else 1.0
+        pps, icmp_pps = self._recent_rates()
         return {
             "window_seconds": window_seconds,
             "packet_count": self.packet_count,
-            "pps": self.packet_count / span,
+            "pps": pps,
             "syn_count": self.syn_count,
             "ack_count": self.ack_count,
             "icmp_count": self.icmp_count,
+            "icmp_pps": icmp_pps,
             "unique_dst_ports": len(self.dst_ports),
             "unique_dst_ips": len(self.dst_ips),
         }
